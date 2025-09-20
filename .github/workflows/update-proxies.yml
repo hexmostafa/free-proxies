@@ -41,7 +41,6 @@ jobs:
             
             if [ "$(echo "$response" | jq -e '.proxies | length' || true)" -gt 0 ]; then
               echo "$response" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}_proxies.txt"
-              echo "Updated ${type}_proxies.txt"
             else
               echo "No valid $type proxies found or API response was invalid. Skipping file update."
             fi
