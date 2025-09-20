@@ -45,7 +45,7 @@ jobs:
           
           for type in $PROXY_TYPES; do
             echo "--- Fetching proxies for $type ---"
-            response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=20000&apikey=$API_KEY")
+            response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
             body=$(echo "$response" | sed '$d')
             
