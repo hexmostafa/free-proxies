@@ -40,9 +40,18 @@ You can use these lists directly in your applications. Here are examples using `
 ```bash
 # Get HTTP proxies
 curl -o http_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/http.txt
-
+```
+```bash
 # Get HTTPS proxies
 curl -o https_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/https.txt
+```
+```bash
+# Get socks4 proxies
+curl -o socks4_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/socks4.txt
+```
+```bash
+# Get socks5 proxies
+curl -o socks5_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/socks5.txt
 ```
 
 ### ⚠️ Disclaimer
