@@ -2,8 +2,7 @@ name: Update Proxies
 
 on:
   schedule:
-    # اجرا هر دو دقیقه یک بار
-    - cron: '*/5 * * * *'
+    - cron: '*/5 * * * *' # پیشنهاد: برای جلوگیری از مشکلات احتمالی، حداقل ۵ دقیقه فاصله باشد
   workflow_dispatch:
 
 permissions:
@@ -20,13 +19,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          # کش حذف شد چون دیگر requirements.txt وجود ندارد
 
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y jq
           python -m pip install --upgrade pip
-          # نصب مستقیم کتابخانه requests
           pip install requests
 
       - name: Scrape and update proxies
@@ -39,9 +36,7 @@ jobs:
           
           for type in $PROXY_TYPES; do
             echo "--- Fetching proxies for $type ---"
-            
-            # ابتدا فایل خالی را ایجاد می‌کنیم تا دستور git add شکست نخورد
-            > "${type}.txt"
+            > "${type}.txt" # ایجاد فایل خالی در ابتدا
             
             response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
@@ -66,15 +61,20 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          git pull --rebase origin main
-
+          # ١. ابتدا فایل‌های جدید یا تغییر کرده را اضافه می‌کنیم
           git add *.txt
           
+          # ٢. اگر تغییری برای کامیت وجود نداشت، خارج می‌شویم
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           
+          # ٣. تغییرات را به صورت محلی کامیت می‌کنیم
           git commit -m "chore(proxies): Update proxy lists"
           
+          # ٤. حالا با سرور هماهنگ می‌شویم و کامیت خود را بالای آن قرار می‌دهیم
+          git pull --rebase origin main
+          
+          # ٥. در نهایت، نتیجه را به سرور push می‌کنیم
           git push
