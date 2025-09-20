@@ -6,6 +6,9 @@ on:
     - cron: '*/2 * * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   update-proxies:
     runs-on: ubuntu-latest
@@ -34,7 +37,7 @@ jobs:
           for type in $PROXY_TYPES
           do
             echo "Fetching $type proxies..."
-            response=$(curl -s "$API_URL?proxy_type=$type&apikey=$API_KEY")
+            response=$(curl -s "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             
             # Check if proxies key exists and is not empty
             if [ "$(echo "$response" | jq -e '.proxies | length')" -gt 0 ]; then
