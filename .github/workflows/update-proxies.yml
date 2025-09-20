@@ -2,12 +2,11 @@ name: Update Proxies
 
 on:
   schedule:
-    # پیشنهاد: برای جلوگیری از مصرف بیش از حد منابع، زمانبندی را طولانی‌تر کنید. مثلا هر 30 دقیقه.
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write # دسترسی لازم برای نوشتن در ریپازیتوری
+  contents: write
 
 jobs:
   update-proxies:
@@ -15,54 +14,44 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # توکن را به صورت مستقیم به این اکشن می‌دهیم تا برای push هم استفاده شود
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip' # کش کردن پکیج‌ها برای اجرای سریع‌تر در دفعات بعدی
+          cache: 'pip' # این گزینه با وجود requirements.txt به درستی کار خواهد کرد
 
       - name: Install dependencies
         run: |
-          # نصب jq از طریق پکیج منیجر سیستم‌عامل که روش استاندارد برای ابزارهای CLI است
           sudo apt-get update && sudo apt-get install -y jq
           python -m pip install --upgrade pip
-          pip install requests
+          pip install -r requirements.txt
 
       - name: Scrape and update proxies
         env:
           API_KEY: ${{ secrets.MY_API_KEY }}
         run: |
-          set -e # در صورت بروز خطا، اسکریپت متوقف شود
+          set -e
           PROXY_TYPES="http https socks4 socks5"
           API_URL="https://hex.qwezt.com:7000/api/v1/proxies/scrape"
           
           for type in $PROXY_TYPES; do
             echo "--- Fetching proxies for $type ---"
-            
-            # استفاده از curl با timeout برای جلوگیری از معلق ماندن و بررسی کد وضعیت HTTP
             response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
-            
-            # جدا کردن بدنه پاسخ از کد وضعیت HTTP
             http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
             body=$(echo "$response" | sed '$d')
             
             if [ "$http_status" -ne 200 ]; then
               echo "Error: Received HTTP status $http_status for $type. Skipping."
               echo "Response body: $body"
-              continue # رفتن به نوع پروکسی بعدی
+              continue
             fi
             
-            # بررسی اینکه آیا پاسخ JSON معتبر است و آرایه proxies وجود دارد و خالی نیست
             if echo "$body" | jq -e '.proxies | length > 0' > /dev/null; then
               echo "$body" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}.txt"
               echo "Successfully updated ${type}.txt"
             else
-              echo "API response for $type was valid, but no proxies were found. Skipping file update."
-              # ایجاد فایل خالی برای جلوگیری از باقی ماندن لیست‌های قدیمی
+              echo "API response for $type was valid, but no proxies were found. Creating empty file."
               > "${type}.txt"
             fi
             echo "------------------------------------"
@@ -73,19 +62,12 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # بررسی وجود تغییرات قبل از هر کاری
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit."
             exit 0
           fi
           
           git add *.txt
-          
-          # Pull کردن آخرین تغییرات از ریپازیتوری با استراتژی rebase برای جلوگیری از merge commit های اضافی
-          # این خط مهم‌ترین بخش رفع خطا است
           git pull --rebase origin main
-          
           git commit -m "chore(proxies): Update proxy lists"
-          
-          # Push کردن تغییرات به ریپازیتوری
           git push
