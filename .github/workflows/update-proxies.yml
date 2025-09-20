@@ -2,26 +2,18 @@ name: Update Proxies
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # هر 30 دقیقه اجرا می‌شود
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   update-proxies:
     runs-on: ubuntu-latest
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # دریافت کل تاریخچه برای عملیات Git
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -55,7 +47,8 @@ jobs:
             fi
             
             if echo "$body" | jq -e '.proxies | length > 0' > /dev/null; then
-              echo "$body" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}.txt"
+              # =====> این خط اصلاح شد <=====
+              echo "$body" | jq -r '.proxies[] | .[]' > "${type}.txt"
               echo "Successfully updated ${type}.txt"
             else
               echo "No proxies found for $type. Creating an empty file."
@@ -65,27 +58,19 @@ jobs:
           done
 
       - name: Commit and push changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # دریافت آخرین تغییرات از سرور
           git pull --rebase origin main
-          
-          # اضافه کردن فایل‌های متنی جدید به index
+
           git add *.txt
           
-          # بررسی تغییرات برای کامیت
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           
-          # کامیت کردن تغییرات
           git commit -m "chore(proxies): Update proxy lists"
           
-          # ارسال تغییرات به سرور با استفاده از توکن
-          git push https://x:${GITHUB_TOKEN}@github.com/hexmostafa/free-proxies.git
+          git push
