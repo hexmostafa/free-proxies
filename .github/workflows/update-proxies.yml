@@ -1,101 +1,80 @@
-# نام Workflow
 name: Update Proxies
 
-# زمان‌بندی اجرا
 on:
   schedule:
-    # هر 30 دقیقه یک بار اجرا می‌شود (برای مصرف بهینه منابع)
     - cron: '*/30 * * * *'
-  # قابلیت اجرای دستی
   workflow_dispatch:
 
-# دسترسی‌های لازم برای Workflow
 permissions:
   contents: write
 
-# تعریف جاب (Job)
 jobs:
   update-proxies:
-    runs-on: ubuntu-latest # اجرا روی آخرین نسخه اوبونتو
+    runs-on: ubuntu-latest
     steps:
-      # مرحله ۱: کپی کردن کد ریپازیتوری به محیط اجرایی
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # مرحله ۲: آماده‌سازی پایتون
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          # فعال‌سازی کش بر اساس فایل requirements.txt برای سرعت بیشتر
           cache: 'pip'
 
-      # مرحله ۳: نصب وابستگی‌ها
       - name: Install dependencies
         run: |
-          # نصب ابزار jq از طریق پکیج منیجر سیستم
           sudo apt-get update && sudo apt-get install -y jq
-          # ارتقاء pip
           python -m pip install --upgrade pip
-          # نصب پکیج‌ها از روی فایل نیازمندی‌ها
           pip install -r requirements.txt
 
-      # مرحله ۴: دریافت و به‌روزرسانی لیست پروکسی‌ها
       - name: Scrape and update proxies
         env:
           API_KEY: ${{ secrets.MY_API_KEY }}
         run: |
-          set -e # توقف اسکریپت در صورت بروز اولین خطا
+          set -e
           PROXY_TYPES="http https socks4 socks5"
           API_URL="https://hex.qwezt.com:7000/api/v1/proxies/scrape"
           
           for type in $PROXY_TYPES; do
             echo "--- Fetching proxies for $type ---"
-            
-            # درخواست به API با timeout و بررسی کد وضعیت HTTP برای جلوگیری از خطا
             response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
             body=$(echo "$response" | sed '$d')
             
-            # اگر پاسخ سرور موفقیت‌آمیز نبود، از این نوع پروکسی عبور کن
             if [ "$http_status" -ne 200 ]; then
               echo "Error: Received HTTP status $http_status for $type. Skipping."
               continue
             fi
             
-            # بررسی محتوای پاسخ و ایجاد فایل متنی
             if echo "$body" | jq -e '.proxies | length > 0' > /dev/null; then
               echo "$body" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}.txt"
               echo "Successfully updated ${type}.txt"
             else
               echo "No proxies found for $type. Creating an empty file."
-              # ایجاد فایل خالی تا لیست‌های قدیمی پاک شوند
               > "${type}.txt"
             fi
             echo "------------------------------------"
           done
 
-      # مرحله ۵: کامیت و پوش کردن تغییرات در ریپازیتوری
       - name: Commit and push changes
         run: |
-          # تنظیمات کاربر گیت برای کامیت
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # اگر هیچ تغییری در فایل‌ها ایجاد نشده بود، خارج شو
-          if [ -z "$(git status --porcelain)" ]; then
+          # ١. ابتدا آخرین تغییرات را از سرور دریافت می‌کنیم
+          git pull --rebase origin main
+
+          # ٢. سپس فایل‌های جدید را اضافه می‌کنیم
+          git add *.txt
+          
+          # ٣. بررسی می‌کنیم که آیا تغییری برای کامیت وجود دارد یا نه
+          if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           
-          # اضافه کردن تمام فایل‌های متنی جدید به کامیت
-          git add *.txt
-
-          # دریافت آخرین تغییرات از سرور (مهم‌ترین بخش برای رفع خطای push)
-          git pull --rebase origin main
-          
-          # کامیت کردن تغییرات
+          # ٤. تغییرات را کامیت می‌کنیم
           git commit -m "chore(proxies): Update proxy lists"
           
-          # ارسال تغییرات به گیت‌هاب
+          # ٥. در نهایت، به سرور push می‌کنیم
           git push
