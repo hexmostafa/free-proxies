@@ -104,11 +104,19 @@ This project is licensed under the MIT License. See the [LICENSE](https://github
 ```bash
 # دریافت پروکسی‌های HTTP
 curl -o http_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/http.txt
-
+```
+```bash
 # دریافت پروکسی‌های HTTPS
 curl -o https_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/https.txt
 ```
-
+```bash
+# Get socks4 proxies
+curl -o socks4_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/socks4.txt
+```
+```bash
+# Get socks5 proxies
+curl -o socks5_proxies.txt https://raw.githubusercontent.com/hexmostafa/free-proxies/main/socks5.txt
+```
 ### ⚠️ سلب مسئولیت
 
 این پروکسی‌ها از منابع عمومی جمع‌آوری شده و به همان صورت ارائه می‌شوند.
