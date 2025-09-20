@@ -2,38 +2,32 @@ name: Update Proxies
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # هر 30 دقیقه اجرا می‌شود
+    # اجرا هر دو دقیقه یک بار
+    - cron: '*/2 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   update-proxies:
     runs-on: ubuntu-latest
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # دریافت کل تاریخچه برای عملیات Git
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
+          # کش حذف شد چون دیگر requirements.txt وجود ندارد
 
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y jq
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # نصب مستقیم کتابخانه requests
+          pip install requests
 
       - name: Scrape and update proxies
         env:
@@ -45,6 +39,10 @@ jobs:
           
           for type in $PROXY_TYPES; do
             echo "--- Fetching proxies for $type ---"
+            
+            # ابتدا فایل خالی را ایجاد می‌کنیم تا دستور git add شکست نخورد
+            > "${type}.txt"
+            
             response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
             body=$(echo "$response" | sed '$d')
@@ -54,39 +52,29 @@ jobs:
               continue
             fi
             
-            field="${type}_proxy"
-            if echo "$body" | jq -e ".proxies | length > 0" > /dev/null; then
-              echo "$body" | jq -r ".proxies[] | .$field" > "${type}_proxies.txt"
-              echo "Successfully updated ${type}_proxies.txt"
+            if echo "$body" | jq -e '.proxies | length > 0' > /dev/null; then
+              echo "$body" | jq -r '.proxies[] | .[]' > "${type}.txt"
+              echo "Successfully updated ${type}.txt"
             else
-              echo "No proxies found for $type. Creating an empty file."
-              > "${type}_proxies.txt"
+              echo "No proxies found for $type. File remains empty."
             fi
             echo "------------------------------------"
           done
 
       - name: Commit and push changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
-          # دریافت آخرین تغییرات از سرور
           git pull --rebase origin main
+
+          git add *.txt
           
-          # اضافه کردن فایل‌های متنی جدید به index
-          git add *_proxies.txt
-          
-          # بررسی تغییرات برای کامیت
           if git diff --staged --quiet; then
             echo "No changes to commit."
             exit 0
           fi
           
-          # کامیت کردن تغییرات
           git commit -m "chore(proxies): Update proxy lists"
           
-          # ارسال تغییرات به سرور با استفاده از توکن
-          git push https://x:${GITHUB_TOKEN}@github.com/hexmostafa/free-proxies.git
+          git push
