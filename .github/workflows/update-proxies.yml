@@ -39,7 +39,6 @@ jobs:
             response=$(curl -s "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             echo "$response"
             
-            # Use || true to prevent the script from exiting on jq error
             if [ "$(echo "$response" | jq -e '.proxies | length' || true)" -gt 0 ]; then
               echo "$response" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}_proxies.txt"
               echo "Updated ${type}_proxies.txt"
@@ -53,6 +52,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git pull origin main
           git add *.txt
           git commit -m "chore: Update proxy lists" || echo "No changes to commit"
           git push
