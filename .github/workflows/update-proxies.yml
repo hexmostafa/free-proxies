@@ -39,7 +39,6 @@ jobs:
             echo "Fetching $type proxies..."
             response=$(curl -s "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
             
-            # Check if proxies key exists and is not empty
             if [ "$(echo "$response" | jq -e '.proxies | length')" -gt 0 ]; then
               echo "$response" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}_proxies.txt"
               echo "Updated ${type}_proxies.txt"
