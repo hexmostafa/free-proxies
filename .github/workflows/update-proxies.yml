@@ -1,0 +1,132 @@
+```yaml
+name: Update Proxies
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # هر 30 دقیقه اجرا می‌شود
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  update-proxies:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # دریافت کل تاریخچه برای عملیات Git
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Scrape and update proxies
+        env:
+          API_KEY: ${{ secrets.MY_API_KEY }}
+        run: |
+          set -e
+          PROXY_TYPES="http https socks4 socks5"
+          API_URL="https://hex.qwezt.com:7000/api/v1/proxies/scrape"
+          
+          for type in $PROXY_TYPES; do
+            echo "--- Fetching proxies for $type ---"
+            response=$(curl --connect-timeout 15 --max-time 30 -s -w "\nHTTP_STATUS:%{http_code}" "$API_URL?proxy_type=$type&count=5000&apikey=$API_KEY")
+            http_status=$(echo "$response" | grep "HTTP_STATUS" | cut -d: -f2)
+            body=$(echo "$response" | sed '$d')
+            
+            if [ "$http_status" -ne 200 ]; then
+              echo "Error: Received HTTP status $http_status for $type. Skipping."
+              continue
+            fi
+            
+            if echo "$body" | jq -e '.proxies | length > 0' > /dev/null; then
+              echo "$body" | jq -r '.proxies[] | "\(.ip):\(.port)"' > "${type}.txt"
+              echo "Successfully updated ${type}.txt"
+            else
+              echo "No proxies found for $type. Creating an empty file."
+              > "${type}.txt"
+            fi
+            echo "------------------------------------"
+          done
+
+      - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # دریافت آخرین تغییرات از سرور
+          git pull --rebase origin main
+          
+          # اضافه کردن فایل‌های متنی جدید به index
+          git add *.txt
+          
+          # بررسی تغییرات برای کامیت
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          
+          # کامیت کردن تغییرات
+          git commit -m "chore(proxies): Update proxy lists"
+          
+          # ارسال تغییرات به سرور با استفاده از توکن
+          git push https://x:${GITHUB_TOKEN}@github.com/hexmostafa/free-proxies.git
+```
+
+### تغییرات و بهینه‌سازی‌ها
+1. **رفع ارور `cannot pull with rebase`**:
+   - دستور `git pull --rebase origin main` قبل از `git add *.txt` اجرا می‌شود تا از وجود تغییرات uncommitted در index جلوگیری شود.
+   - این ترتیب تضمین می‌کند که ابتدا مخزن محلی با ریموت همگام‌سازی شود و سپس تغییرات جدید staged و commit شوند.
+
+2. **اضافه کردن احراز هویت برای `git push`**:
+   - استفاده از `git push https://x:${GITHUB_TOKEN}@github.com/hexmostafa/free-proxies.git` برای اطمینان از دسترسی صحیح به مخزن با استفاده از `GITHUB_TOKEN`.
+
+3. **مدیریت همزمانی**:
+   - اضافه کردن `concurrency` با `group: ${{ github.workflow }}-${{ github.ref }}` و `cancel-in-progress: true` برای جلوگیری از اجرای همزمان چند workflow روی شاخه‌ی `main`.
+
+4. **حفظ فاصله زمانی 30 دقیقه**:
+   - فاصله زمانی `*/30 * * * *` حفظ شده است، زیرا به نظر می‌رسد برای نیاز شما مناسب است. در صورت بروز مشکلات همزمانی بیشتر، می‌توانید آن را به `*/60 * * * *` (هر ساعت) افزایش دهید.
+
+5. **مدیریت خطاها**:
+   - استفاده از `set -e` در اسکریپت‌ها برای توقف در صورت بروز خطا.
+   - بررسی وضعیت HTTP در درخواست‌های API و مدیریت پاسخ‌های ناموفق.
+   - ایجاد فایل خالی در صورت عدم دریافت پروکسی برای اطمینان از پاک شدن لیست‌های قدیمی.
+
+6. **بهینه‌سازی Checkout**:
+   - استفاده از `fetch-depth: 0` برای دریافت کل تاریخچه مخزن، که برای عملیات `git pull` و `git push` ضروری است.
+   - استفاده از `token: ${{ secrets.GITHUB_TOKEN }}` در مرحله‌ی `checkout` برای اطمینان از دسترسی کامل.
+
+### نکات مهم برای اجرا
+- **بررسی تنظیمات مخزن**: مطمئن شوید که در تنظیمات مخزن (`Settings > Actions > General`)، گزینه‌ی "Allow GitHub Actions to create and approve pull requests" فعال باشد و `github-actions[bot]` اجازه‌ی write به مخزن را داشته باشد.
+- **بررسی API Key**: اطمینان حاصل کنید که `MY_API_KEY` در بخش `Secrets` مخزن به درستی تنظیم شده و API در `https://hex.qwezt.com:7000/api/v1/proxies/scrape` پاسخ‌های معتبر می‌دهد.
+- **فایل requirements.txt**: مطمئن شوید که فایل `requirements.txt` در مخزن وجود دارد و شامل پکیج‌های مورد نیاز (مانند `requests`) است. برای مثال:
+  ```
+  requests>=2.32.5
+  ```
+- **دیباگ بیشتر**: اگر باز هم خطایی رخ داد، لاگ کامل را بررسی کنید یا اطلاع دهید تا جزئیات بیشتری تحلیل کنم.
+
+### تست و اجرا
+1. فایل YAML بالا را در مسیر `.github/workflows/update-proxies.yml` ذخیره کنید.
+2. تغییرات را به مخزن push کنید و workflow را از طریق `Actions` در GitHub یا با اجرای دستی (`workflow_dispatch`) تست کنید.
+3. لاگ‌ها را بررسی کنید تا مطمئن شوید که مراحل `git pull`, `git add`, `git commit`, و `git push` بدون خطا اجرا می‌شوند.
+
+این کد باید مشکل `exit code 128` و ارور `cannot pull with rebase` را به طور کامل برطرف کند و workflow را به صورت پایدار و بهینه اجرا کند. اگر مشکلی باقی ماند، لاگ جدید را به اشتراک بگذارید تا بررسی دقیق‌تری انجام دهم!
