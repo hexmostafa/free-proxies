@@ -3,7 +3,7 @@ name: Update Proxies
 on:
   schedule:
     # اجرا هر دو دقیقه یک بار
-    - cron: '*/2 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
