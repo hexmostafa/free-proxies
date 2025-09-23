@@ -33,7 +33,7 @@ jobs:
         run: |
           set -e
           PROXY_TYPES="http https socks4 socks5"
-          API_URL="https://hex.qwezt.com:7000/api/v1/proxies/scrape"
+          API_URL="https://errortoolsbot.chickenkiller.com:7000/api/v1/proxies/scrape"
           
           for type in $PROXY_TYPES; do
             echo "--- Fetching proxies for $type ---"
